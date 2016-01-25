@@ -68,6 +68,47 @@ class Filter(BaseFilter):
 
         return dpr
 
+    def get_area_values_for(self, node):
+        """
+        Gets the XMP values for the given Area Node.
+        :param node: The full path to the node.
+        :type node: Basestring
+        :return: A dictionary with the filled in values.
+        :rtype: dict
+        """
+        if type(node) == unicode:
+            node = node.encode('utf-8')
+        meta = self.engine.metadata
+
+        if node not in meta.xmp_keys:
+            raise KeyError('Node %s not found in XMP data.' % node)
+
+        node_keys = [n.encode('utf-8') for n in meta.xmp_keys
+                     if n.startswith(node) and n != node]
+        values = dict((k.split(':')[-1], float(meta[k].value)) for k in node_keys)
+        return values
+
+    def get_area_values_for_array(self, node):
+        """
+        Gets the XMP values for nodes which are an array (RecommendedAreas)
+        :param node: The full path tho the node without the Array selector
+        :type node: Basestring
+        :return: A list of dictionaries
+        :rtype: list
+        """
+        if type(node) == unicode:
+            node = node.encode('utf-8')
+        i = 1
+        result = []
+        while True:
+            test_node = b'%s[%i]' % (node, i)
+            if test_node in self.engine.metadata.xmp_keys:
+                result.append(self.get_area_values_for(test_node))
+                i += 1
+            else:
+                break
+        return result
+
     def _check_allowed(self):
         metadata = self.engine.metadata
 
@@ -93,10 +134,18 @@ class Filter(BaseFilter):
 
         if not self._check_valid():
             return
+        crop = (0, 0, 1, 1)  #  x0 y0, x1, y1
 
-        if not self._check_allowed():
-            return
+        # Check if a CropArea is defined:
 
+        # Check if responsive Cropping is allowed
+        is_crop_allowed = self._check_allowed()
+
+        # Get the display resolution
         dpr = self._get_dpr(initial_dpr)
+
+        # Store the focal point
+
+
 
 
