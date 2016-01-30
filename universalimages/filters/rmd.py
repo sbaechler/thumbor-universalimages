@@ -59,6 +59,7 @@ class Filter(BaseFilter):
         # target size is in display independent pixels
         target_width, target_height = \
             self.context.transformer.get_target_dimensions()
+        target_aspect = float(target_width) / target_height
         interpolation = self.xmp.get_value_for(b'Xmp.rmd.Interpolation') or 'step'
         source_aspect = self.engine.size[1] / self.engine.size[0]
 
@@ -66,19 +67,17 @@ class Filter(BaseFilter):
         pivot_point = self._get_pivot_point()
         # Check if a CropArea is defined:
         crop_area = self.xmp.get_area_values_for(b'Xmp.rmd.CropArea')
+        crop_area_aspect_ratio = source_aspect
         if crop_area:
-            crop, should_crop, commit = self._process_crop_area(
+            crop, should_crop, commit, crop_area_aspect_ratio = self._process_crop_area(
                 crop_area=crop_area, context=self.context,
                 target_width=target_width, target_height=target_height)
             if commit:
                 logger.debug('Crop Area is defined and final.')
                 return self._commit(crop, should_crop)
 
-            # If no MinWidth is defined, check for a Safety Area. Use the CropArea
-            # as the new reference width for the linear algorithm
             target_width, target_height = \
                 self.context.transformer.get_target_dimensions()
-
 
         # Check if responsive Cropping is allowed
         if not self.xmp.check_allowed():
@@ -86,56 +85,88 @@ class Filter(BaseFilter):
             logger.debug('Responsive Cropping is not allowed.')
             return self._commit(crop, False)
 
-        # Calculate if cropping is needed
-        crop_min_width = int(crop_area.get('MinWidth')) if crop_area else None
+        # If no MinWidth is defined, check for a Safety Area. Use the CropArea
+        # as the new reference width for the linear algorithm
+
 
         # If crop_min_width is none, then just check the recommended
         # and the safety areas.
 
-
-
         # Check if the requested size is larger than the safety area
         safe_area = self.xmp.get_area_values_for(b'Xmp.rmd.SafeArea')
+        safe_area_absolute = None
 
         if safe_area:
-            target_aspect_ratio = float(target_width) / target_height
-            for key in ['x', 'y', 'w', 'h', 'MaxWidth']:
-                if not key in safe_area:
-                    logger.debug('Safe Area Node is not valid. Skipping.')
-                    return (0, 0) + self.engine.size, False, False
-
-            safe_max_width = int(safe_area.get('MaxWidth')) if safe_area else None
-            x0, y0, x1, y1 = self.xmp.stArea_to_absolute(
-                safe_area, self.engine.size)
-            safe_width = x1 - x0
-            safe_height = y1 - y0
-            safe_aspect_ratio = float(safe_width) / float(safe_height)
-            if not pivot_point:
-                # Use the center of the safe area
-                pivot_point = x0 + safe_width / 2.0, y0 + safe_height / 2.0
-
-            if target_width <= safe_max_width:
-                # Very small target. Smaller or equal to the safety area.
-                should_crop = True
-
-                # if target height (dp) >= safe area height (dp), normalized to target width
-                if target_height >= (target_width / safe_aspect_ratio) or target_width < safe_width:
-                    # use the target aspect ratio and safety width
-                    old_height = float(safe_height)
-                    safe_height = safe_width / target_aspect_ratio
-                    lower = (safe_height - old_height) * ((pivot_point[1]-y0) / old_height)
-                    upper = safe_height - old_height - lower
-                    crop = x0, y0 - upper, x1, y1 + lower
-
-                else:
-                    #  Widen the crop area to use the full safety height.
-                    old_width = float(safe_width)
-                    safe_width = safe_height * target_aspect_ratio
-                    left = (safe_width - old_width) * ((pivot_point[0]-x0) / old_width)
-                    right = safe_width - old_width - left
-                    crop = x0 - left, y0, x1 + right, y1
+            crop, should_crop, commit, safe_area_absolute = self._process_safe_area(
+                crop, should_crop, safe_area, target_width, target_height, pivot_point)
+            if commit:
+                logger.debug('Image is smaller than the safe area.')
+                return self._commit(crop, should_crop)
 
         # Look for the ideal region.
+
+        if interpolation == 'linear':
+
+            logger.debug('2-dimensional crop with linear interpolation')
+            # Calculate if cropping is needed
+            crop_min_width = int(crop_area.get('MinWidth')) if crop_area else None
+            safe_max_width = int(safe_area.get('MaxWidth')) if safe_area else None
+            if not (crop_min_width and safe_max_width):
+                return crop, False, True
+
+            crop_min_height = crop_min_width / crop_area_aspect_ratio
+            x0, y0, x1, y1 = crop
+
+            if target_height > crop_min_height:
+                crop_height = y1 - y0
+                crop_width = crop_height * target_aspect
+            else:
+                crop_width = (float(x1 - x0) / crop_min_width) * target_width
+                crop_height = crop_width / target_aspect
+
+            x_ratio = (pivot_point.x - x0) / (x1 - pivot_point.x)
+            y_ratio = (pivot_point.y - y0) / (y1 - pivot_point.y)
+            # a = relative distance from the left crop point to the pivot point
+            a = crop_width / (1.0 + x_ratio)
+            left = pivot_point.x - a
+            right = left + crop_width
+
+            # a = relative distance from the top crop point to the pivot point
+            a = crop_height / (1.0 + y_ratio)
+            top = pivot_point.y - a
+            bottom = top + crop_height
+
+            # Check if the safe area is hit
+            if safe_area_absolute:
+                # TODO: Check if this is even possible
+                if safe_area_absolute.x0 < left:
+                    left = safe_area_absolute.x0
+                    right = left + crop_width
+                elif safe_area_absolute.x1 > right:
+                    right = safe_area_absolute.x1
+                    left = right - crop_width
+                if safe_area_absolute.y0 < top:
+                    top = safe_area_absolute.y0
+                    bottom = top + crop_height
+                elif safe_area_absolute.y1 > bottom:
+                    bottom = safe_area_absolute.y1
+                    top = bottom - crop_height
+
+            crop = left, top, right, bottom
+
+            # calculate new crop area
+
+            pass
+        else:
+            # find recommended crop
+
+            # check aspect ratio
+            pass
+
+
+
+
+
         return self._commit(crop, should_crop)
 
     # Private methods
@@ -143,10 +174,10 @@ class Filter(BaseFilter):
     def _commit(self, crop, should_crop):
         # Set the values and exit.
         self.context.request.crop = {
-            'left': crop[0],
-            'top': crop[1],
-            'right': crop[2],
-            'bottom': crop[3]
+            'left': int(round(crop[0])),
+            'top': int(round(crop[1])),
+            'right': int(round(crop[2])),
+            'bottom': int(round(crop[3]))
         }
         self.context.request.should_crop = should_crop
         return True
@@ -175,27 +206,27 @@ class Filter(BaseFilter):
         x0, y0, x1, y1 = crop = self.xmp.stArea_to_absolute(
                 crop_area, self.engine.size)
         should_crop = True
-        source_aspect = float(x1-x0) / float(y1-y0)
+        crop_area_aspect = float(x1-x0) / float(y1-y0)
 
         # If only one dimension was passed in the request, then the aspect
         # ratio has to be adjusted for the crop area.
         if context.request.width and not context.request.height:
             if context.request.width == 'orig':
-                context.transformer.target_height = int(
-                        round(self.engine.size[0] / source_aspect))
+                context.transformer.target_height = target_height = int(
+                        round(self.engine.size[0] / crop_area_aspect))
             else:
-                context.transformer.target_height = int(
-                        round(float(context.request.width) / source_aspect))
+                context.transformer.target_height = target_height = int(
+                        round(float(context.request.width) / crop_area_aspect))
         elif context.request.height and not context.request.width:
             if context.request.height == 'orig':
-                context.transformer.target_width = int(
-                    round(self.engine.size[1] * source_aspect ))
+                context.transformer.target_width = target_width = int(
+                    round(self.engine.size[1] * crop_area_aspect ))
             else:
-                context.transformer.target_width = int(
-                    round(float(context.request.height * source_aspect)))
+                context.transformer.target_width = target_width = int(
+                    round(float(context.request.height * crop_area_aspect)))
         elif not context.request.height and not context.request.width:
-            context.transformer.target_width = x1 - x0
-            context.transformer.target_height = y1 - y0
+            context.transformer.target_width = target_width = x1 - x0
+            context.transformer.target_height = target_height = y1 - y0
 
         if 'MinWidth' in crop_area:
             #  Check if the desired crop is larger than the min width.
@@ -204,15 +235,54 @@ class Filter(BaseFilter):
                 # Check if Cropping for layout purposes is allowed:
                 if self.xmp.get_value_for(b'Xmp.rmd.AllowedDerivates/rmd:Crop') != 'all':
                     context.request.fit_in = True
-                    return crop, should_crop, True
+                    return crop, should_crop, True, crop_area_aspect
 
                 # Check if the new image size needs to be cropped further
-                if target_height == int(round(float(target_width) / source_aspect)):
+                if target_height == int(round(float(target_width) / crop_area_aspect)):
                     # Aspect ratios match
-                    return crop, should_crop, True
+                    return crop, should_crop, True, crop_area_aspect
 
-        return crop, should_crop, False
+        return crop, should_crop, False, crop_area_aspect
 
+    def _process_safe_area(self, crop, should_crop, safe_area,
+                           target_width, target_height, pivot_point):
+        target_aspect_ratio = float(target_width) / target_height
+        for key in ['x', 'y', 'w', 'h', 'MaxWidth']:
+            if not key in safe_area:
+                logger.debug('Safe Area Node is not valid. Skipping.')
+                return crop, should_crop, False, None
+
+        safe_max_width = int(safe_area.get('MaxWidth')) if safe_area else None
+        x0, y0, x1, y1 = safe_area_absolute = self.xmp.stArea_to_absolute(
+            safe_area, self.engine.size)
+        safe_width = x1 - x0
+        safe_height = y1 - y0
+        safe_aspect_ratio = float(safe_width) / float(safe_height)
+
+        if target_width <= safe_max_width:
+            # Very small target. Smaller or equal to the safety area.
+            should_crop = True
+
+            # if target height (dp) >= safe area height (dp), normalized to target width
+            if target_height >= (target_width / safe_aspect_ratio) or target_width < safe_width:
+                # use the target aspect ratio and safety width
+                old_height = float(safe_height)
+                safe_height = safe_width / target_aspect_ratio
+                lower = (safe_height - old_height) * ((pivot_point[1]-y0) / old_height)
+                upper = safe_height - old_height - lower
+                crop = x0, y0 - upper, x1, y1 + lower
+
+            else:
+                #  Widen the crop area to use the full safety height.
+                old_width = float(safe_width)
+                safe_width = safe_height * target_aspect_ratio
+                left = (safe_width - old_width) * ((pivot_point[0]-x0) / old_width)
+                right = safe_width - old_width - left
+                crop = x0 - left, y0, x1 + right, y1
+
+            return crop, should_crop, True, None
+
+        return crop, should_crop, False, safe_area_absolute
 
     def _get_dpr(self, initial_dpr, request_headers):
         """

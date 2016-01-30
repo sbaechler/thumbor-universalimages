@@ -1,4 +1,10 @@
 # coding: utf-8
+# thumbor imaging service
+# https://github.com/thumbor/thumbor/wiki
+
+# Licensed under the MIT license:
+# http://www.opensource.org/licenses/mit-license
+# Copyright (c) 2011 globo.com timehome@corp.globo.com
 
 
 import random
@@ -16,9 +22,6 @@ from thumbor.importer import Importer
 from thumbor.transformer import Transformer
 from skimage.measure import structural_similarity
 
-
-
-
 def get_ssim(actual, expected):
     im = Image.fromarray(actual)
     im2 = Image.fromarray(expected)
@@ -31,9 +34,6 @@ def get_ssim(actual, expected):
             )
         )
     return structural_similarity(np.array(im), np.array(im2), multichannel=True)
-
-
-
 
 
 class FilterTestCase(TestCase):

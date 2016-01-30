@@ -299,3 +299,61 @@ class RmdFilterUnittestsTestCase(FilterTestCase):
         # 300 x 450
         self.assertEqual(self.get_color_at(image, 0, 0), 'green')
         self.assertEqual(self.get_color_at(image, 0, 125), 'red')  # 200 * 2/3
+
+    def test_linear_crop_1(self):
+        def config_context(context):
+            context.request.width = 400
+            context.request.height = 300
+
+        fltr = self.get_filter('universalimages.filters.rmd', 'rmd()',
+                               config_context=config_context)
+        self.assertFalse(fltr.context.request.should_crop)
+
+        self.load_file('regions.jpg', fltr.engine)
+        fltr.run()
+        self.assertTrue(fltr.context.request.should_crop)
+        self.assertCrop(fltr.context.request.crop, (53, 120, 587, 520))
+        fltr.context.transformer.img_operation_worker()
+        self.assertCrop(fltr.context.request.crop, (53, 120, 587, 520))
+        image = np.array(fltr.engine.image)
+        self.assertEqual(self.get_color_at(image, 0, 0), 'green')
+        self.assertEqual(self.get_color_at(image, 100, 75), 'red')
+
+    def test_linear_crop_2(self):
+        def config_context(context):
+            context.request.width = 480
+            context.request.height = 480
+
+        fltr = self.get_filter('universalimages.filters.rmd', 'rmd()',
+                               config_context=config_context)
+        self.assertFalse(fltr.context.request.should_crop)
+
+        self.load_file('regions.jpg', fltr.engine)
+        fltr.run()
+        self.assertTrue(fltr.context.request.should_crop)
+        self.assertCrop(fltr.context.request.crop, (80, 80, 560, 560))
+        fltr.context.transformer.img_operation_worker()
+        self.assertCrop(fltr.context.request.crop, (80, 80, 560, 560))
+        image = np.array(fltr.engine.image)
+        self.assertEqual(self.get_color_at(image, 0, 0), 'green')
+        self.assertEqual(self.get_color_at(image, 90, 140), 'red')  # 170 - 80, 220 - 80
+        self.assertEqual(self.get_color_at(image, 120, 140), 'red')
+
+    def test_linear_crop_3(self):
+        def config_context(context):
+            context.request.width = 400
+            context.request.height = 400
+
+        fltr = self.get_filter('universalimages.filters.rmd', 'rmd()',
+                               config_context=config_context)
+        self.assertFalse(fltr.context.request.should_crop)
+
+        self.load_file('regions.jpg', fltr.engine)
+        fltr.run()
+        self.assertTrue(fltr.context.request.should_crop)
+        self.assertCrop(fltr.context.request.crop, (80, 80, 560, 560))
+        fltr.context.transformer.img_operation_worker()
+        self.assertCrop(fltr.context.request.crop, (80, 80, 560, 560))
+        image = np.array(fltr.engine.image)
+        self.assertEqual(self.get_color_at(image, 0, 0), 'green')
+        self.assertEqual(self.get_color_at(image, 75, 117), 'red')

@@ -1,8 +1,13 @@
 # coding: utf-8
 
 import logging
+from collections import namedtuple
 
 logger = logging.getLogger('universalimages.filters')
+
+Area = namedtuple('Area', ['x0', 'y0', 'x1', 'y1'])
+Point = namedtuple('Point', ['x', 'y'])
+
 
 class Xmp_API(object):
     """
@@ -114,14 +119,16 @@ class Xmp_API(object):
         :type stArea_values: dict
         :param image_size: Tuple with the target size (width, height)
         :type image_size: tuple (int, int)
-        :return: Tuple with the coordinates of the upper left and lower right
-                 point (x0, y0, x1, y1)
-        :rtype: Tuple (float, float) or (float, float, float, float)
+        :return: Named Tuple with the coordinates of the upper left and lower right
+                 point (x0, y0, x1, y1) or x and y coordinates (x, y)
+        :rtype: namedtuple (x:float, y:float) or (x0:float, y0:float, x1:float, y1:float)
         """
         if not stArea_values:
             return None
 
-        if 'w' in stArea_values:
+        area = 'w' in stArea_values
+
+        if area:
             # Area
             source = (x, y, w, h) = (stArea_values['x'], stArea_values['y'],
                                      stArea_values['w'], stArea_values['h'])
@@ -135,13 +142,13 @@ class Xmp_API(object):
             if 0 > value > 1:
                 raise AttributeError('Invalid Area values.')
 
-        if 'w' in stArea_values:
+        if area:
             x0, y0 = (x - w/2.0) * width, (y - h/2.0) * height
             x1, y1 = (x + w/2.0) * width, (y + h/2.0) * height
 
-            return x0, y0, x1, y1
+            return Area(x0, y0, x1, y1)
         else:
-            return x * width, y * height
+            return Point(x * width, y * height)
 
 
     def get_absolute_area_for(self, node, image_size):
