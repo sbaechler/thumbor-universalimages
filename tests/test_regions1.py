@@ -39,26 +39,6 @@ class RmdFilterUnittestsTestCase(FilterTestCase):
     def get_fixture_path(self, name):
         return join(STORAGE_PATH, name)
 
-        
-    # def get_context(self):
-    #     config = Config(
-    #         SECURITY_KEY='ACME-SEC',
-    #         FILE_LOADER_ROOT_PATH=STORAGE_PATH,
-    #         ENGINE = 'thumbor.engines.pil',
-    #         STORAGE = 'thumbor.storages.no_storage'
-    #     )
-    #     # initialize the filter class.
-    #     importer = Importer(config)
-    #     importer.import_modules()
-    #     ctx = Context(config=config, importer=importer)
-    #     req = RequestParameters()
-    #     ctx.request = req
-    #     engine = Engine(ctx)
-    #     ctx.request.engine = engine
-    #     ctx.transformer = Transformer(ctx)
-    #     return ctx, engine
-    #
-    #
 
     def load_file(self, file_name, engine):
         with open(join(STORAGE_PATH, file_name), 'rb') as im:
@@ -145,7 +125,7 @@ class RmdFilterUnittestsTestCase(FilterTestCase):
         self.assertEqual(area['x'], 0.5)
         self.assertEqual(area['y'], 0.5)
 
-    def test_crop_only_original_size(self):
+    def test_crop_only_original_size1(self):
         fltr = self.get_filter('universalimages.filters.rmd', 'rmd()')
         self.assertFalse(fltr.context.request.should_crop)
 
@@ -156,9 +136,11 @@ class RmdFilterUnittestsTestCase(FilterTestCase):
         fltr.context.transformer.img_operation_worker()
         self.assertCrop(fltr.context.request.crop, (0, 80, 640, 560))
         image = np.array(fltr.engine.image)
+        self.assertEqual(len(image[0]), 640)
+        self.assertEqual(len(image), 480)
         self.assertEqual(self.get_color_at(image, 0, 0), 'green')
 
-    def test_crop_only_width(self):
+    def test_crop_only_width1(self):
         def config_context(context):
             context.request.width = 480
 
@@ -173,9 +155,10 @@ class RmdFilterUnittestsTestCase(FilterTestCase):
         fltr.context.transformer.img_operation_worker()
         self.assertCrop(fltr.context.request.crop, (0, 80, 640, 560))
         image = np.array(fltr.engine.image)
+        self.assertEqual(len(image[0]), 480)
         self.assertEqual(self.get_color_at(image, 0, 0), 'green')
 
-    def test_crop_only_height(self):
+    def test_crop_only_height1(self):
         def config_context(context):
             context.request.height = 480
 
@@ -190,22 +173,11 @@ class RmdFilterUnittestsTestCase(FilterTestCase):
         fltr.context.transformer.img_operation_worker()
         self.assertCrop(fltr.context.request.crop, (0, 80, 640, 560))
         image = np.array(fltr.engine.image)
+        self.assertEqual(len(image), 480)
         self.assertEqual(self.get_color_at(image, 0, 0), 'green')
 
-    # @unittest.skip
-    # def test_crop_width_and_height(self):
-    #     context, engine = self.get_context()
-    #     context.request.height = 480
-    #     context.request.width = 480
-    #     self.load_file('regions.jpg', engine)
-    #     filt = Filter('', context)
-    #     filt.xmp.metadata = engine.metadata
-    #     self.assertFalse(context.request.should_crop)
-    #     filt.rmd()
-    #     self.assertTrue(context.request.should_crop)
-    #     self.assertCrop(context.request.crop, (0, 0, 640, 640))
-
-    def test_small_crop_exact_safe_area(self):
+    def test_small_crop_exact_safe_area1(self):
+        # Crop to the safe area
         def config_context(context):
             context.request.width = 300
             context.request.height = 200
@@ -221,9 +193,12 @@ class RmdFilterUnittestsTestCase(FilterTestCase):
         fltr.context.transformer.img_operation_worker()
         self.assertCrop(fltr.context.request.crop, (170, 220, 470, 420))
         image = np.array(fltr.engine.image)
+        self.assertEqual(len(image[0]), 300)
+        self.assertEqual(len(image), 200)
         self.assertEqual(self.get_color_at(image, 0, 0), 'red')
 
     def test_small_crop_less_than_safe_area1(self):
+        # Crop to the safe area
         def config_context(context):
             context.request.width = 240
             context.request.height = 160
@@ -239,6 +214,8 @@ class RmdFilterUnittestsTestCase(FilterTestCase):
         fltr.context.transformer.img_operation_worker()
         self.assertCrop(fltr.context.request.crop, (170, 220, 470, 420))
         image = np.array(fltr.engine.image)
+        self.assertEqual(len(image[0]), 240)
+        self.assertEqual(len(image), 160)
         self.assertEqual(self.get_color_at(image, 0, 0), 'red')
 
     def test_small_crop_less_than_safe_area2(self):
@@ -257,6 +234,8 @@ class RmdFilterUnittestsTestCase(FilterTestCase):
         fltr.context.transformer.img_operation_worker()
         self.assertCrop(fltr.context.request.crop, (170, 170, 470, 470))
         image = np.array(fltr.engine.image)
+        self.assertEqual(len(image[0]), 200)
+        self.assertEqual(len(image), 200)
         self.assertEqual(self.get_color_at(image, 0, 0), 'green')
         self.assertEqual(self.get_color_at(image, 0, 50), 'red')
 
@@ -277,6 +256,8 @@ class RmdFilterUnittestsTestCase(FilterTestCase):
         fltr.context.transformer.img_operation_worker()
         self.assertCrop(fltr.context.request.crop, (120, 220, 520, 420))
         image = np.array(fltr.engine.image)
+        self.assertEqual(len(image[0]), 300)
+        self.assertEqual(len(image), 150)
         self.assertEqual(self.get_color_at(image, 0, 0), 'green')
         self.assertEqual(self.get_color_at(image, 38, 5), 'red')  # 50 * 3/4
 
@@ -296,6 +277,8 @@ class RmdFilterUnittestsTestCase(FilterTestCase):
         fltr.context.transformer.img_operation_worker()
         self.assertCrop(fltr.context.request.crop, (170, 95, 470, 545))
         image = np.array(fltr.engine.image)
+        self.assertEqual(len(image[0]), 200)
+        self.assertEqual(len(image), 300)
         # 300 x 450
         self.assertEqual(self.get_color_at(image, 0, 0), 'green')
         self.assertEqual(self.get_color_at(image, 0, 125), 'red')  # 200 * 2/3
@@ -316,6 +299,8 @@ class RmdFilterUnittestsTestCase(FilterTestCase):
         fltr.context.transformer.img_operation_worker()
         self.assertCrop(fltr.context.request.crop, (53, 120, 587, 520))
         image = np.array(fltr.engine.image)
+        self.assertEqual(len(image[0]), 400)
+        self.assertEqual(len(image), 300)
         self.assertEqual(self.get_color_at(image, 0, 0), 'green')
         self.assertEqual(self.get_color_at(image, 100, 75), 'red')
 
@@ -335,11 +320,14 @@ class RmdFilterUnittestsTestCase(FilterTestCase):
         fltr.context.transformer.img_operation_worker()
         self.assertCrop(fltr.context.request.crop, (80, 80, 560, 560))
         image = np.array(fltr.engine.image)
+        self.assertEqual(len(image[0]), 480)
+        self.assertEqual(len(image), 480)
         self.assertEqual(self.get_color_at(image, 0, 0), 'green')
         self.assertEqual(self.get_color_at(image, 90, 140), 'red')  # 170 - 80, 220 - 80
         self.assertEqual(self.get_color_at(image, 120, 140), 'red')
 
     def test_linear_crop_3(self):
+        # Target height is larger than Crop MinHeight, so the full crop area is used.
         def config_context(context):
             context.request.width = 400
             context.request.height = 400
@@ -355,5 +343,7 @@ class RmdFilterUnittestsTestCase(FilterTestCase):
         fltr.context.transformer.img_operation_worker()
         self.assertCrop(fltr.context.request.crop, (80, 80, 560, 560))
         image = np.array(fltr.engine.image)
+        self.assertEqual(len(image[0]), 400)
+        self.assertEqual(len(image), 400)
         self.assertEqual(self.get_color_at(image, 0, 0), 'green')
         self.assertEqual(self.get_color_at(image, 75, 117), 'red')

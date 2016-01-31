@@ -106,7 +106,6 @@ class Filter(BaseFilter):
         # Look for the ideal region.
 
         if interpolation == 'linear':
-
             logger.debug('2-dimensional crop with linear interpolation')
             # Calculate if cropping is needed
             crop_min_width = int(crop_area.get('MinWidth')) if crop_area else None
@@ -124,17 +123,20 @@ class Filter(BaseFilter):
                 crop_width = (float(x1 - x0) / crop_min_width) * target_width
                 crop_height = crop_width / target_aspect
 
-            x_ratio = (pivot_point.x - x0) / (x1 - pivot_point.x)
-            y_ratio = (pivot_point.y - y0) / (y1 - pivot_point.y)
-            # a = relative distance from the left crop point to the pivot point
-            a = crop_width / (1.0 + x_ratio)
-            left = pivot_point.x - a
-            right = left + crop_width
+            x_ratio = float(pivot_point.x - x0) / (x1 - pivot_point.x)
+            y_ratio = float(pivot_point.y - y0) / (y1 - pivot_point.y)
+            # b = relative distance from the the pivot point to the right crop.
+            # This is more stable than calculating the left crop.
 
-            # a = relative distance from the top crop point to the pivot point
-            a = crop_height / (1.0 + y_ratio)
-            top = pivot_point.y - a
-            bottom = top + crop_height
+            b = crop_width / (1.0 + x_ratio)
+            right = pivot_point.x + b
+            left = right - crop_width
+
+            # b = relative distance from the the pivot point to the bottom crop.
+
+            b = crop_height / (1.0 + y_ratio)
+            bottom = pivot_point.y + b
+            top = bottom - crop_height
 
             # Check if the safe area is hit
             if safe_area_absolute:
@@ -262,23 +264,43 @@ class Filter(BaseFilter):
         if target_width <= safe_max_width:
             # Very small target. Smaller or equal to the safety area.
             should_crop = True
-
             # if target height (dp) >= safe area height (dp), normalized to target width
             if target_height >= (target_width / safe_aspect_ratio) or target_width < safe_width:
+
                 # use the target aspect ratio and safety width
-                old_height = float(safe_height)
-                safe_height = safe_width / target_aspect_ratio
-                lower = (safe_height - old_height) * ((pivot_point[1]-y0) / old_height)
-                upper = safe_height - old_height - lower
-                crop = x0, y0 - upper, x1, y1 + lower
+                crop_height = safe_width / target_aspect_ratio
+                y_ratio = float(pivot_point.y - crop.y0) / (crop.y1 - pivot_point.y)
+                b = crop_height / (y_ratio + 1)
+                bottom = pivot_point.y + b
+                top = bottom - crop_height
+
+                # Check if the safe area is protected:
+                if bottom < y1:
+                    top = y0
+                    bottom = top + crop_height
+                elif top > y0:
+                    bottom = y1
+                    top = bottom - crop_height
+
+                crop = x0, top, x1, bottom
 
             else:
                 #  Widen the crop area to use the full safety height.
-                old_width = float(safe_width)
-                safe_width = safe_height * target_aspect_ratio
-                left = (safe_width - old_width) * ((pivot_point[0]-x0) / old_width)
-                right = safe_width - old_width - left
-                crop = x0 - left, y0, x1 + right, y1
+                crop_width = safe_height * target_aspect_ratio
+                x_ratio = float(pivot_point.x - crop.x0) / (crop.x1 - pivot_point.x)
+
+                b = crop_width / (1.0 + x_ratio)
+                right = pivot_point.x + b
+                left = right - crop_width
+
+                if right < x1:
+                    left = x0
+                    right = left + crop_width
+                elif left > x0:
+                    right = x1
+                    left = right - crop_width
+
+                crop = left, y0, right, y1
 
             return crop, should_crop, True, None
 
