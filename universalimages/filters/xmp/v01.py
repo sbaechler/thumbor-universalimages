@@ -138,6 +138,7 @@ class Xmp_API(object):
 
         width, height = image_size
 
+
         for value in source:
             if 0 > value > 1:
                 raise AttributeError('Invalid Area values.')

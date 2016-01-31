@@ -2,11 +2,14 @@
 from __future__ import unicode_literals, absolute_import
 
 import logging
+from collections import namedtuple
 
 from thumbor.filters import BaseFilter, filter_method, PHASE_AFTER_LOAD
 from .xmp.v01 import Xmp_API   # Good enough for now.
 
 logger = logging.getLogger('universalimages.filters')
+
+Point = namedtuple('Point', ['x', 'y'])
 
 
 class Filter(BaseFilter):
@@ -188,15 +191,15 @@ class Filter(BaseFilter):
         # Get the pivot point from the XML
         pivot_point = self.xmp.get_absolute_area_for(b'Xmp.rmd.PivotPoint',
                                                      self.engine.size)
-        if pivot_point[0] is None:
+        if not pivot_point:
             # Use the center of the safe area
-            x0, x1, y0, y1 = self.xmp.get_absolute_area_for(b'Xmp.rmd.SafeArea',
-                                                     self.engine.size)
+            x0, y0, x1, y1 = self.xmp.get_absolute_area_for(
+                b'Xmp.rmd.SafeArea', self.engine.size)
             try:
-                pivot_point = (x0 + (x1 - x0) / 2.0, y0 + (y1 - y0) / 2.0)
+                pivot_point = Point(x0 + (x1 - x0) / 2.0, y0 + (y1 - y0) / 2.0)
             except TypeError:
                 # Use the image center
-                pivot_point = (self.engine.size[0] / 2.0, self.engine_size[1] / 2.0)
+                pivot_point = Point(self.engine.size[0] / 2.0, self.engine.size[1] / 2.0)
 
         return pivot_point
 
@@ -264,43 +267,61 @@ class Filter(BaseFilter):
         if target_width <= safe_max_width:
             # Very small target. Smaller or equal to the safety area.
             should_crop = True
+
+            # If just the target width was passed, make it the safety area.
+            if not self.context.request.height:
+                self.context.transformer.target_height  = target_width / safe_aspect_ratio
+                return (safe_area_absolute, True, True, safe_area_absolute)
+            elif not  self.context.request.width:
+                #  Reduce the width, so the aspect matches the safety area.
+                self.context.transformer.target_width = target_height * safe_aspect_ratio
+                return (safe_area_absolute, True, True, safe_area_absolute)
+
             # if target height (dp) >= safe area height (dp), normalized to target width
-            if target_height >= (target_width / safe_aspect_ratio) or target_width < safe_width:
-
+            elif target_height >= (target_width / safe_aspect_ratio):
                 # use the target aspect ratio and safety width
+                source_height = crop.y1 - crop.y0
                 crop_height = safe_width / target_aspect_ratio
-                y_ratio = float(pivot_point.y - crop.y0) / (crop.y1 - pivot_point.y)
-                b = crop_height / (y_ratio + 1)
-                bottom = pivot_point.y + b
-                top = bottom - crop_height
-
-                # Check if the safe area is protected:
-                if bottom < y1:
-                    top = y0
+                if crop_height < source_height:
+                    a = (pivot_point.y - crop.y0) * crop_height / source_height
+                    top = pivot_point.y - a
                     bottom = top + crop_height
-                elif top > y0:
-                    bottom = y1
-                    top = bottom - crop_height
 
-                crop = x0, top, x1, bottom
+                    # Check if the safe area is protected:
+                    if bottom < y1:
+                        top = y0
+                        bottom = top + crop_height
+                    elif top > y0:
+                        bottom = y1
+                        top = bottom - crop_height
+
+                    crop = x0, top, x1, bottom
+
+                else:
+                    crop = x0, crop.y0, x1, crop.y1
+                    self.context.request.fit_in = True
 
             else:
                 #  Widen the crop area to use the full safety height.
+                source_width = crop.x1 - crop.x0
                 crop_width = safe_height * target_aspect_ratio
-                x_ratio = float(pivot_point.x - crop.x0) / (crop.x1 - pivot_point.x)
-
-                b = crop_width / (1.0 + x_ratio)
-                right = pivot_point.x + b
-                left = right - crop_width
-
-                if right < x1:
-                    left = x0
+                # Pivot point relative to the crop area:
+                if crop_width < source_width:
+                    a = (pivot_point.x - crop.x0) * crop_width / source_width
+                    left = pivot_point.x - a
                     right = left + crop_width
-                elif left > x0:
-                    right = x1
-                    left = right - crop_width
 
-                crop = left, y0, right, y1
+                    if right < x1:
+                        left = x0
+                        right = left + crop_width
+                    elif left > x0:
+                        right = x1
+                        left = right - crop_width
+
+                    crop = left, y0, right, y1
+                else:
+                    crop = crop.x0, y0, crop.x1, y1
+                    self.context.request.fit_in = True
 
             return crop, should_crop, True, None
 

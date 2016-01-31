@@ -1,21 +1,9 @@
 # coding: utf-8
 from __future__ import unicode_literals, absolute_import
-import unittest
 
-import mock
 import numpy as np
-
 from .base import FilterTestCase
-from thumbor.importer import Importer
-from thumbor.transformer import Transformer
-
-from universalimages.filters.rmd import Filter
-from universalimages.filters.xmp.v01 import Xmp_API
-
 from os.path import abspath, join, dirname
-from thumbor.context import Context, RequestParameters
-from thumbor.config import Config
-from thumbor.engines.pil import Engine
 
 STORAGE_PATH = abspath(join(dirname(__file__), 'fixtures'))
 
