@@ -177,6 +177,111 @@ class RmdFilterUnittestsTestCase(FilterTestCase):
         self.assertCrop(fltr.context.request.crop, (214, 114, 932, 835))
         fltr.context.transformer.img_operation_worker()
         image = np.array(fltr.engine.image)
-        self.debug(image)
         self.assertEqual(len(image[0]), 200)
         self.assertEqual(len(image), 201)  # Image is cropped.
+
+    def test_step_crop_at_360dp(self):
+        def config_context(context):
+            context.request.width = 360
+
+        fltr = self.get_filter('universalimages.filters.rmd', 'rmd()',
+                               config_context=config_context)
+        self.assertFalse(fltr.context.request.should_crop)
+
+        self.load_file('monks-regions.jpg', fltr.engine)
+        fltr.run()
+        self.assertTrue(fltr.context.request.should_crop)
+        self.assertCrop(fltr.context.request.crop, (95, 231, 952, 797))
+        fltr.context.transformer.img_operation_worker()
+        image = np.array(fltr.engine.image)
+        self.assertEqual(len(image[0]), 360)
+        self.assertEqual(len(image), 238)
+
+    def test_step_crop_at_360dp2(self):
+        def config_context(context):
+            context.request.width = 360
+            context.request.height = 200
+
+        fltr = self.get_filter('universalimages.filters.rmd', 'rmd()',
+                               config_context=config_context)
+        self.assertFalse(fltr.context.request.should_crop)
+
+        self.load_file('monks-regions.jpg', fltr.engine)
+        fltr.run()
+        self.assertTrue(fltr.context.request.should_crop)
+        self.assertCrop(fltr.context.request.crop, (95, 231, 952, 797))
+        fltr.context.transformer.img_operation_worker()
+        image = np.array(fltr.engine.image)
+        self.assertEqual(len(image[0]), 360)
+        self.assertEqual(len(image), 200)
+
+    def test_step_crop_at_340(self):
+        def config_context(context):
+            context.request.width = 360
+
+        fltr = self.get_filter('universalimages.filters.rmd', 'rmd()',
+                               config_context=config_context)
+        self.assertFalse(fltr.context.request.should_crop)
+
+        self.load_file('monks-regions.jpg', fltr.engine)
+        fltr.run()
+        self.assertTrue(fltr.context.request.should_crop)
+        self.assertCrop(fltr.context.request.crop, (95, 231, 952, 797))
+        fltr.context.transformer.img_operation_worker()
+        image = np.array(fltr.engine.image)
+        self.assertEqual(len(image[0]), 360)
+        self.assertEqual(len(image), 238)
+
+    def test_step_crop_at_400(self):
+        def config_context(context):
+            context.request.width = 400
+
+        fltr = self.get_filter('universalimages.filters.rmd', 'rmd()',
+                               config_context=config_context)
+        self.assertFalse(fltr.context.request.should_crop)
+
+        self.load_file('monks-regions.jpg', fltr.engine)
+        fltr.run()
+        self.assertTrue(fltr.context.request.should_crop)
+        self.assertCrop(fltr.context.request.crop, (80, 114, 1163, 835))
+        fltr.context.transformer.img_operation_worker()
+        image = np.array(fltr.engine.image)
+        self.assertEqual(len(image[0]), 400)
+        self.assertEqual(len(image), 266)
+
+    def test_step_crop_at_400x400(self):
+        def config_context(context):
+            context.request.width = 400
+            context.request.height = 400
+
+        fltr = self.get_filter('universalimages.filters.rmd', 'rmd()',
+                               config_context=config_context)
+        self.assertFalse(fltr.context.request.should_crop)
+
+        self.load_file('monks-regions.jpg', fltr.engine)
+        fltr.run()
+        self.assertTrue(fltr.context.request.should_crop)
+        self.assertCrop(fltr.context.request.crop, (120, 44, 974, 900))
+        fltr.context.transformer.img_operation_worker()
+        image = np.array(fltr.engine.image)
+        self.assertEqual(len(image[0]), 400)
+        self.assertEqual(len(image), 400)
+
+    def test_step_crop_at_360x360(self):
+        # crop the square area
+        def config_context(context):
+            context.request.width = 360
+            context.request.height = 360
+
+        fltr = self.get_filter('universalimages.filters.rmd', 'rmd()',
+                               config_context=config_context)
+        self.assertFalse(fltr.context.request.should_crop)
+
+        self.load_file('monks-regions.jpg', fltr.engine)
+        fltr.run()
+        self.assertTrue(fltr.context.request.should_crop)
+        self.assertCrop(fltr.context.request.crop, (120, 44, 974, 900))
+        fltr.context.transformer.img_operation_worker()
+        image = np.array(fltr.engine.image)
+        self.assertEqual(len(image[0]), 360)
+        self.assertEqual(len(image), 360)

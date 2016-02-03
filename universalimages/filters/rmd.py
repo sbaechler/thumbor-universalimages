@@ -5,6 +5,8 @@ import logging
 from collections import namedtuple
 
 from thumbor.filters import BaseFilter, filter_method, PHASE_AFTER_LOAD
+from thumbor.utils import deprecated
+
 from .xmp.v01 import Xmp_API   # Good enough for now.
 
 logger = logging.getLogger('universalimages.filters')
@@ -24,9 +26,9 @@ class Filter(BaseFilter):
     """
 
     phase = PHASE_AFTER_LOAD
-    MIN_DPR = 0.5
-    MAX_DPR = 4.0
-    MIN_DOWNLINK = 1.0  # mbit/s
+    # MIN_DPR = 0.5
+    # MAX_DPR = 4.0
+    # MIN_DOWNLINK = 1.0  # mbit/s
 
     def __init__(self, params, context=None):
         super(Filter, self).__init__(params, context)
@@ -109,68 +111,37 @@ class Filter(BaseFilter):
         # Look for the ideal region.
 
         if interpolation == 'linear':
-            logger.debug('2-dimensional crop with linear interpolation')
-            # Calculate if cropping is needed
-            crop_min_width = int(crop_area.get('MinWidth')) if crop_area else None
-            safe_max_width = int(safe_area.get('MaxWidth')) if safe_area else None
-            if not (crop_min_width and safe_max_width):
-                return crop, False, True
-
-            crop_min_height = crop_min_width / crop_area_aspect_ratio
-            x0, y0, x1, y1 = crop
-
-            if target_height > crop_min_height:
-                crop_height = y1 - y0
-                crop_width = crop_height * target_aspect
-            else:
-                crop_width = (float(x1 - x0) / crop_min_width) * target_width
-                crop_height = crop_width / target_aspect
-
-            x_ratio = float(pivot_point.x - x0) / (x1 - pivot_point.x)
-            y_ratio = float(pivot_point.y - y0) / (y1 - pivot_point.y)
-            # b = relative distance from the the pivot point to the right crop.
-            # This is more stable than calculating the left crop.
-
-            b = crop_width / (1.0 + x_ratio)
-            right = pivot_point.x + b
-            left = right - crop_width
-
-            # b = relative distance from the the pivot point to the bottom crop.
-
-            b = crop_height / (1.0 + y_ratio)
-            bottom = pivot_point.y + b
-            top = bottom - crop_height
-
-            # Check if the safe area is hit
-            if safe_area_absolute:
-                # TODO: Check if this is even possible
-                if safe_area_absolute.x0 < left:
-                    left = safe_area_absolute.x0
-                    right = left + crop_width
-                elif safe_area_absolute.x1 > right:
-                    right = safe_area_absolute.x1
-                    left = right - crop_width
-                if safe_area_absolute.y0 < top:
-                    top = safe_area_absolute.y0
-                    bottom = top + crop_height
-                elif safe_area_absolute.y1 > bottom:
-                    bottom = safe_area_absolute.y1
-                    top = bottom - crop_height
-
-            crop = left, top, right, bottom
-
-            # calculate new crop area
-
-            pass
+            crop, should_crop = self._process_linear_interpolation(
+                crop, crop_area, crop_area_aspect_ratio, safe_area,
+                target_width, target_height, target_aspect,
+                pivot_point, safe_area_absolute)
         else:
             # find recommended crop
-
             # check aspect ratio
-            pass
+            logger.debug('Looking for best recommended crop area')
+            recommended_frames = self.xmp.get_area_values_for_array(b'Xmp.rmd.RecommendedFrames')
+            good_frames = []
+            if not recommended_frames:
+                logger.debug('No recommended frames found.')
+                return self._commit(crop, should_crop)
+            for frame in recommended_frames:
+                if not ('MinWidth' in frame and int(frame['MinWidth']) > target_width or
+                        'MaxWidth' in frame and int(frame['MaxWidth']) < target_width or
+                        'MinAspectRatio' in frame and float(frame['MinAspectRatio'])
+                                < target_aspect or
+                        'MaxAspectRatio' in frame and float(frame['MaxAspectRatio'])
+                                > target_aspect):
+                    good_frames.append(frame)
 
+            if len(good_frames) < 1:
+                # do nothing
+                return self._commit(crop, should_crop)
+            elif len(good_frames) > 1:
+                # rate frames by matching area
+                sorted(good_frames, key=self._get_area_sort_key(target_aspect))
+            crop = self.xmp.stArea_to_absolute(good_frames[0], self.engine.size)
 
-
-
+            should_crop = True
 
         return self._commit(crop, should_crop)
 
@@ -327,37 +298,100 @@ class Filter(BaseFilter):
 
         return crop, should_crop, False, safe_area_absolute
 
-    def _get_dpr(self, initial_dpr, request_headers):
-        """
-        Returns the display resolution factor. The passed in values override
-        the client hint values. A slow connection reduces the dpr to a minimum.
-        :param initial_dpr: values from the URL
-        :type initial_dpr: float
-        :param request_headers: HTTP Request Headers
-        :type request_headers: dict
-        :return: Calculated values
-        :rtype: float
-        """
-        dpr = 1.0
+    def _process_linear_interpolation(
+            self, crop, crop_area, crop_area_aspect_ratio,
+            safe_area, target_width, target_height, target_aspect,
+            pivot_point, safe_area_absolute):
+        logger.debug('2-dimensional crop with linear interpolation')
+        # Calculate if cropping is needed
+        crop_min_width = int(crop_area.get('MinWidth')) if crop_area else None
+        safe_max_width = int(safe_area.get('MaxWidth')) if safe_area else None
+        if not (crop_min_width and safe_max_width):
+            return crop, False
 
-        # Check if the dpr was sent with HTTP Client Hints
-        header_dpr = request_headers.get('Dpr')
-        if header_dpr is not None:
-            logger.debug('Dpr in header found. Using this value: %s'
-                         % header_dpr)
-            dpr = float(header_dpr)
+        crop_min_height = crop_min_width / crop_area_aspect_ratio
+        x0, y0, x1, y1 = crop
 
-        # args can override Headers
-        if initial_dpr:
-            if self.MIN_DPR <= initial_dpr <= self.MAX_DPR:
-                dpr = initial_dpr
-            else:
-                logger.debug('Illegal dpr value: %s' % initial_dpr)
+        if target_height > crop_min_height:
+            crop_height = y1 - y0
+            crop_width = crop_height * target_aspect
+        else:
+            crop_width = (float(x1 - x0) / crop_min_width) * target_width
+            crop_height = crop_width / target_aspect
 
-        # Check if the downlink speed is fast enough for retina images
-        header_downlink = request_headers.get('Downlink')
-        if header_downlink and float(header_downlink) < self.MIN_DOWNLINK:
-            dpr = min(dpr, 1.0)
+        x_ratio = float(pivot_point.x - x0) / (x1 - pivot_point.x)
+        y_ratio = float(pivot_point.y - y0) / (y1 - pivot_point.y)
+        # b = relative distance from the the pivot point to the right crop.
+        # This is more stable than calculating the left crop.
 
-        return dpr
+        b = crop_width / (1.0 + x_ratio)
+        right = pivot_point.x + b
+        left = right - crop_width
+
+        # b = relative distance from the the pivot point to the bottom crop.
+
+        b = crop_height / (1.0 + y_ratio)
+        bottom = pivot_point.y + b
+        top = bottom - crop_height
+
+        # Check if the safe area is hit
+        if safe_area_absolute:
+            # TODO: Check if this is even possible
+            if safe_area_absolute.x0 < left:
+                left = safe_area_absolute.x0
+                right = left + crop_width
+            elif safe_area_absolute.x1 > right:
+                right = safe_area_absolute.x1
+                left = right - crop_width
+            if safe_area_absolute.y0 < top:
+                top = safe_area_absolute.y0
+                bottom = top + crop_height
+            elif safe_area_absolute.y1 > bottom:
+                bottom = safe_area_absolute.y1
+                top = bottom - crop_height
+
+        crop = left, top, right, bottom
+        return crop, True
+
+    def _get_area_sort_key(self, target_aspect):
+        # find the best aspect ratio
+        def area_sort_key(item):
+            area = item.get('w', 0) / item.get('h', 1)
+            return abs(area - target_aspect)
+
+
+    # This is in thumbor core (hopefully)
+    # def _get_dpr(self, initial_dpr, request_headers):
+    #     """
+    #     Returns the display resolution factor. The passed in values override
+    #     the client hint values. A slow connection reduces the dpr to a minimum.
+    #     :param initial_dpr: values from the URL
+    #     :type initial_dpr: float
+    #     :param request_headers: HTTP Request Headers
+    #     :type request_headers: dict
+    #     :return: Calculated values
+    #     :rtype: float
+    #     """
+    #     dpr = 1.0
+    #
+    #     # Check if the dpr was sent with HTTP Client Hints
+    #     header_dpr = request_headers.get('Dpr')
+    #     if header_dpr is not None:
+    #         logger.debug('Dpr in header found. Using this value: %s'
+    #                      % header_dpr)
+    #         dpr = float(header_dpr)
+    #
+    #     # args can override Headers
+    #     if initial_dpr:
+    #         if self.MIN_DPR <= initial_dpr <= self.MAX_DPR:
+    #             dpr = initial_dpr
+    #         else:
+    #             logger.debug('Illegal dpr value: %s' % initial_dpr)
+    #
+    #     # Check if the downlink speed is fast enough for retina images
+    #     header_downlink = request_headers.get('Downlink')
+    #     if header_downlink and float(header_downlink) < self.MIN_DOWNLINK:
+    #         dpr = min(dpr, 1.0)
+    #
+    #     return dpr
 
