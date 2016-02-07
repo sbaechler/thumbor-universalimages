@@ -16,11 +16,14 @@ and exiv2:
 This installs pyexiv2 in the homebrew python folder. If you already have a virtualenv, you 
 have to recreate it.
 
+For Ubuntu just install pyexiv2:
+
+    apt-get install python-pyexiv2
+
 Currently the filter requires a custom branch of thumbor which supports xmp metadata.
 
-`pip install -e git+git@github.com:sbaechler/thumbor-universalimages.git@56ce1f7a714571ba41827d7adab6d8f01595695c#egg=universalimages`.
-
-`pip install git+https://github.com/sbaechler/thumbor-universalimages`.
+    pip install git+http://github.com/sbaechler/thumbor.git@831501939ebd3be538c63fb617a3cdb8d995fa80
+    git+http://github.com/sbaechler/thumbor-universalimages.git@294dad08b8c6cffec9aed6752cef5af7c2cdb1cd
 
 Add `universalimages.filters.rmd` to `thumbor.conf.FILTERS`.
 
