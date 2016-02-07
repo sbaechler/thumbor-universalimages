@@ -25,7 +25,7 @@ class Xmp_API(object):
         :return: True if it is valid.
         :rtype: Boolean
         """
-        if not 'Xmp.rmd.AppliedToDimensions' in self.metadata.xmp_keys:
+        if 'Xmp.rmd.AppliedToDimensions' not in self.metadata.xmp_keys:
             logger.debug('No RMD metadata found')
             return False
 
@@ -36,7 +36,7 @@ class Xmp_API(object):
         if (width, height) != image_size:
             logger.debug('Metadata has been applied to a different image size.'
                          ' ({}x{}, but current image is {}x{}.)'.format(
-                width, height, *image_size
+                            width, height, *image_size
             ))
             return False
 
@@ -103,7 +103,7 @@ class Xmp_API(object):
         """
 
         if 'Xmp.rmd.AllowedDerivates/rmd:Crop' in self.metadata.xmp_keys:
-            crop_allowed =self.metadata.get(
+            crop_allowed = self.metadata.get(
                     b'Xmp.rmd.AllowedDerivates/rmd:Crop').value
             if crop_allowed not in ['visibilityOnly', 'all']:
                 logger.debug('Allowed Derivates disallow cropping: %s'
@@ -138,7 +138,6 @@ class Xmp_API(object):
 
         width, height = image_size
 
-
         for value in source:
             if 0 > value > 1:
                 raise AttributeError('Invalid Area values.')
@@ -150,7 +149,6 @@ class Xmp_API(object):
             return Area(x0, y0, x1, y1)
         else:
             return Point(x * width, y * height)
-
 
     def get_absolute_area_for(self, node, image_size):
         """

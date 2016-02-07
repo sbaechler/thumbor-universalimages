@@ -5,9 +5,8 @@ import logging
 from collections import namedtuple
 
 from thumbor.filters import BaseFilter, filter_method, PHASE_AFTER_LOAD
-from thumbor.utils import deprecated
 
-from .xmp.v01 import Xmp_API   # Good enough for now.
+from .xmp.v01 import Xmp_API  # Support multiple versions in the future.
 
 logger = logging.getLogger('universalimages.filters')
 
@@ -26,9 +25,6 @@ class Filter(BaseFilter):
     """
 
     phase = PHASE_AFTER_LOAD
-    # MIN_DPR = 0.5
-    # MAX_DPR = 4.0
-    # MIN_DOWNLINK = 1.0  # mbit/s
 
     def __init__(self, params, context=None):
         super(Filter, self).__init__(params, context)
@@ -93,7 +89,6 @@ class Filter(BaseFilter):
         # If no MinWidth is defined, check for a Safety Area. Use the CropArea
         # as the new reference width for the linear algorithm
 
-
         # If crop_min_width is none, then just check the recommended
         # and the safety areas.
 
@@ -127,10 +122,10 @@ class Filter(BaseFilter):
             for frame in recommended_frames:
                 if not ('MinWidth' in frame and int(frame['MinWidth']) > target_width or
                         'MaxWidth' in frame and int(frame['MaxWidth']) < target_width or
-                        'MinAspectRatio' in frame and float(frame['MinAspectRatio'])
-                                < target_aspect or
-                        'MaxAspectRatio' in frame and float(frame['MaxAspectRatio'])
-                                > target_aspect):
+                        'MinAspectRatio' in frame and float(
+                                frame['MinAspectRatio']) < target_aspect or
+                        'MaxAspectRatio' in frame and float(
+                                frame['MaxAspectRatio']) > target_aspect):
                     good_frames.append(frame)
 
             if len(good_frames) < 1:
@@ -196,7 +191,7 @@ class Filter(BaseFilter):
         elif context.request.height and not context.request.width:
             if context.request.height == 'orig':
                 context.transformer.target_width = target_width = int(
-                    round(self.engine.size[1] * crop_area_aspect ))
+                    round(self.engine.size[1] * crop_area_aspect))
             else:
                 context.transformer.target_width = target_width = int(
                     round(float(context.request.height * crop_area_aspect)))
@@ -224,7 +219,7 @@ class Filter(BaseFilter):
                            target_width, target_height, pivot_point):
         target_aspect_ratio = float(target_width) / target_height
         for key in ['x', 'y', 'w', 'h', 'MaxWidth']:
-            if not key in safe_area:
+            if key not in safe_area:
                 logger.debug('Safe Area Node is not valid. Skipping.')
                 return crop, should_crop, False, None
 
@@ -241,10 +236,10 @@ class Filter(BaseFilter):
 
             # If just the target width was passed, make it the safety area.
             if not self.context.request.height:
-                self.context.transformer.target_height  = target_width / safe_aspect_ratio
+                self.context.transformer.target_height = target_width / safe_aspect_ratio
                 return (safe_area_absolute, True, True, safe_area_absolute)
-            elif not  self.context.request.width:
-                #  Reduce the width, so the aspect matches the safety area.
+            elif not self.context.request.width:
+                # Reduce the width, so the aspect matches the safety area.
                 self.context.transformer.target_width = target_height * safe_aspect_ratio
                 return (safe_area_absolute, True, True, safe_area_absolute)
 
@@ -358,40 +353,3 @@ class Filter(BaseFilter):
         def area_sort_key(item):
             area = item.get('w', 0) / item.get('h', 1)
             return abs(area - target_aspect)
-
-
-    # This is in thumbor core (hopefully)
-    # def _get_dpr(self, initial_dpr, request_headers):
-    #     """
-    #     Returns the display resolution factor. The passed in values override
-    #     the client hint values. A slow connection reduces the dpr to a minimum.
-    #     :param initial_dpr: values from the URL
-    #     :type initial_dpr: float
-    #     :param request_headers: HTTP Request Headers
-    #     :type request_headers: dict
-    #     :return: Calculated values
-    #     :rtype: float
-    #     """
-    #     dpr = 1.0
-    #
-    #     # Check if the dpr was sent with HTTP Client Hints
-    #     header_dpr = request_headers.get('Dpr')
-    #     if header_dpr is not None:
-    #         logger.debug('Dpr in header found. Using this value: %s'
-    #                      % header_dpr)
-    #         dpr = float(header_dpr)
-    #
-    #     # args can override Headers
-    #     if initial_dpr:
-    #         if self.MIN_DPR <= initial_dpr <= self.MAX_DPR:
-    #             dpr = initial_dpr
-    #         else:
-    #             logger.debug('Illegal dpr value: %s' % initial_dpr)
-    #
-    #     # Check if the downlink speed is fast enough for retina images
-    #     header_downlink = request_headers.get('Downlink')
-    #     if header_downlink and float(header_downlink) < self.MIN_DOWNLINK:
-    #         dpr = min(dpr, 1.0)
-    #
-    #     return dpr
-
