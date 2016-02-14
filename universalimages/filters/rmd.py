@@ -353,3 +353,5 @@ class Filter(BaseFilter):
         def area_sort_key(item):
             area = item.get('w', 0) / item.get('h', 1)
             return abs(area - target_aspect)
+
+        return area_sort_key
