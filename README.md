@@ -21,10 +21,10 @@ For Ubuntu just install pyexiv2:
 
     apt-get install python-pyexiv2
 
-Currently the filter requires a custom branch of thumbor which supports xmp metadata.
-
-    pip install git+http://github.com/sbaechler/thumbor.git@36f2e2ea53092b455d22fa1bab03b7415fcf67cd
-    pip install git+http://github.com/sbaechler/thumbor-universalimages.git@294dad08b8c6cffec9aed6752cef5af7c2cdb1cd
+The filter requires at least version 6 of Thumbor.
+    
+    pip install -r 'thumbor >= 6.0.0b3'
+    pip install git+http://github.com/sbaechler/thumbor-universalimages.git
 
 Add `universalimages.filters.rmd` to `thumbor.conf.FILTERS`.
 

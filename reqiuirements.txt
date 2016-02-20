@@ -1,2 +1,2 @@
 git+https://github.com/escaped/pyexiv2.git
-git+https://github.com/sbaechler/thumbor.git@feature/artdirection
+thumbor >= 6.0.0b3
